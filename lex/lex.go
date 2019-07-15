@@ -95,7 +95,29 @@ type Lexer interface {
 	Row() int
 	NextToken() Token
 	Drain()
+	Run(StateFn)
 }
+
+//StateFn represents the state and the transitions to new states
+//Using the StateFn pattern is hard with a reusable lexer.
+//
+//A trade off has been made. BaseLexer is exposed, and that is what
+//a StateFn has as its argument. It's more convenient to handle a
+//struct than to handle an interface in this case.
+//
+//If, after analysing a few implementations, I come to the conclusion that
+//we are not manipulating the struct so much, even in harder grammars, then
+//I will reduce the useful bits to an interface.
+//
+//But for now, you get a struct.
+type StateFn func(*BaseLexer) StateFn
+
+/*
+//NewLexer returns a new Lexer with the given name and source
+func NewLexer(name, source string) Lexer {
+	return &BaseLexer{Name: name, Input: source}
+}
+*/
 
 //BaseLexer holds the State of the scanner
 type BaseLexer struct {
@@ -108,6 +130,18 @@ type BaseLexer struct {
 	Line      int //Scanner line position
 	Tokens    chan Token
 	//err    error //saw this in a config lang implementation
+}
+
+//Run starts the statemachine of the lexer
+func (l *BaseLexer) run(state StateFn) {
+	for state != nil {
+		state = state(l)
+	}
+	close(l.Tokens)
+}
+
+func (l *BaseLexer) Run(state StateFn) {
+	go l.run(state)
 }
 
 //Next returns the next rune in the source
@@ -171,10 +205,8 @@ func (l *BaseLexer) IgnoreCountNewLines() {
 
 //IgnoreSpaces will accept all space characters and then throw away the token
 func (l *BaseLexer) IgnoreSpaces() {
-	for unicode.IsSpace(l.Next()) {
-	}
-	l.Back()
-	l.IgnoreCountNewLines()
+	l.AcceptSpaces()
+	l.Ignore()
 }
 
 //Errorf is used to emit a formatted error
@@ -192,6 +224,10 @@ func (l *BaseLexer) Unexpected(unexpected interface{}, expected interface{}) {
 	l.Errorf("expected %v, got %v .", expected, unexpected)
 }
 
+func (l *BaseLexer) NotAllowedInContext(notAllowed rune, context interface{}) {
+	l.Errorf("rune %v not allowed in %v", notAllowed, context)
+}
+
 //Accept checks to see if the Next() rune is a part of the argument string.
 //
 //If no acceptable rune is found, it will not be consumed.
@@ -206,8 +242,7 @@ func (l *BaseLexer) Accept(valid string) bool {
 //AcceptRun calls Next() until it gets a rune which is not in the argument string
 //
 //It also reports whether a valid rune was found or not
-func (l *BaseLexer) AcceptRun(valid string) bool {
-	found := false
+func (l *BaseLexer) AcceptRun(valid string) (found bool) {
 	for strings.ContainsRune(valid, l.Next()) {
 		found = true
 	}
@@ -242,13 +277,42 @@ func (l *BaseLexer) AcceptUnicodeRanges(ranges ...*unicode.RangeTable) bool {
 }
 
 //AcceptUnicodeRangeRun will accept a run of runes from the unicode ranges provided
-func (l *BaseLexer) AcceptUnicodeRangeRun(ranges ...*unicode.RangeTable) bool {
-	found := false
+func (l *BaseLexer) AcceptUnicodeRangeRun(ranges ...*unicode.RangeTable) (found bool) {
 	for unicode.In(l.Next(), ranges...) {
 		found = true
 	}
 	l.Back()
 	return found
+}
+
+//AcceptMatchOrRange will accept a rune that is either a part of the string given
+//or in the unicode range tables given
+func (l *BaseLexer) AcceptMatchOrRange(valid string, ranges ...*unicode.RangeTable) (found bool) {
+	r := l.Next()
+	if unicode.In(r, ranges...) || strings.ContainsRune(valid, r) {
+		found = true
+	}
+	l.Back()
+	return
+}
+
+//AcceptMatchOrRange will accept runes that is either a part of the string given
+//or in the unicode range tables given
+func (l *BaseLexer) AcceptMatchOrRangeRun(valid string, ranges ...*unicode.RangeTable) (found bool) {
+	for r := l.Next(); unicode.In(r, ranges...) || strings.ContainsRune(valid, r); r = l.Next() {
+		found = true
+	}
+	l.Back()
+	return
+}
+
+//AcceptSpaces consumes all the space characters
+func (l *BaseLexer) AcceptSpaces() (found bool) {
+	for unicode.IsSpace(l.Next()) {
+		found = true
+	}
+	l.Back()
+	return
 }
 
 //Switch is a convenience function for multi-rune tokens using a lookup table

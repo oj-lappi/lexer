@@ -57,9 +57,8 @@ type Node interface {
 	AddNonTerminal(NodeType, lex.Token) Node
 	AddTerminal(NodeType, lex.Token) Node
 
-	Commit()        //Commit sets parseStatus to FullyParsed
-	CommitSubTree() //CommitSubTree commits the node and all its children
-	RollBack()      //RollBack removes all speculative nodes in a subtree
+	Commit()   //Commit sets parseStatus to FullyParsed
+	RollBack() //RollBack removes all speculative nodes in a subtree
 
 	//Methods for formatting
 	PPrint(indent int) //PPrint pretty prints the parse tree in preorder
@@ -250,16 +249,8 @@ func (n *baseNode) ReplaceWith(nu Node) {
 //END tree manipulation methods
 
 //Commit marks the node as fully parsed
-func (n *baseNode) Commit() {
-	n.parseStatus = FullyParsed
-}
-
-//CommitSubTree commits all the node and all its children
-func (n *baseNode) CommitSubTree() {
+func (b *baseNode) Commit() {
 	b.parseStatus = FullyParsed
-	for _, child := range n.children {
-		child.CommitSubTree()
-	}
 }
 
 //RollBack removes all speculative nodes in a subtree

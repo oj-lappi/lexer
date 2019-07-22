@@ -6,38 +6,46 @@ import (
 )
 
 type Tree struct {
-	Root      Node        //Root of the parse tree
-	Curr      Node        //Current node,
-	Buffer    []lex.Token //Full token stream
-	NameSpace []string    //Current scope
-	Pos       int         //Position of Current token in Buffer
-	NestLevel int         //How many nested expressions are there currently
+	Root        Node        //Root of the parse tree
+	Curr        Node        //Current node,
+	Speculative Node        //Current subtree being parsed, will be attached to curr after a commmit
+	Buffer      []lex.Token //Full token stream
+	NameSpace   []string    //Current scope
+	Pos         int         //Position of Current token in Buffer
 
-	name      string
-	text      string
-	lexer     lex.Lexer
-	parserFun StateFn //The StateFn first called
+	name       string
+	text       string
+	lexer      lex.Lexer
+	startState StateFn //The StateFn first called
 }
 
-type ParseFn func(*Tree)
+//StateFn is used to represent the state of the parser and the state transitions.
+//
+//Any StateFn returned by a StateFn is the new state and will be run next.
+//Returning nil from a StateFn will stop the parser.
+type StateFn func(*Tree) StateFn
 
-func NewTree(name, text string, start ParseFn) *Tree {
+func NewTree(name, text string, start StateFn) *Tree {
 	tree := &Tree{
-		name:      name,
-		text:      text,
-		parserFun: start,
-		NameSpace: make([]string, 0, 4),    //Three is the default amount of names expected (just a guess)
-		Buffer:    make([]lex.Token, 0, 4), //Three is also the default length of the Buffer needed (more educated guess)
-		Pos:       -1,
+		name:       name,
+		text:       text,
+		startState: start,
+		NameSpace:  make([]string, 0, 4),    //Three is the default amount of names expected (just a guess)
+		Buffer:     make([]lex.Token, 0, 4), //Three is also the default length of the Buffer needed (more educated guess)
+		Pos:        -1,
 	}
 
 	tree.Root = NewNonTerminal(RootNode, nil, tree)
 	tree.Curr = tree.Root
+	tree.Speculative = tree.Root
 
 	return tree
 }
 
-//Catches errors from the parser
+//Parse runs the parser on the tokens produced by the lexer given
+//
+//Parse uses the state function pattern.
+//This may change if another approach seems better.
 func (tree *Tree) Parse(lexer lex.Lexer) (err error) {
 
 	defer func() {
@@ -47,7 +55,10 @@ func (tree *Tree) Parse(lexer lex.Lexer) (err error) {
 	}()
 
 	tree.lexer = lexer
-	tree.parserFun()
+	state := tree.startState
+	for state != nil {
+		state = state(tree)
+	}
 	return
 }
 
@@ -72,32 +83,13 @@ func (tree *Tree) Back() {
 	tree.Pos--
 }
 
-//BackUntil goes back through the buffer until it finds a token of a certain type.
-//Assumes the parser implementation knows that this token exists in the buffer.
-func (tree *Tree) BackUntil(typ lex.TokenType) {
-	for ; tree.Buffer[tree.Pos] != typ; tree.Pos-- {
-	}
-}
-
-//Commit adds the speculative node to the current node
-func (tree *Tree) CommitSubTree() {
-	if tree.Curr != nil {
-		tree.Curr.CommitSubTree()
-		tree.Curr = nil
-	} else {
-		panic("Trying to commit nonexisting node to tree")
-	}
-}
-
+/*
 //Commit adds the speculative node to the current node
 func (tree *Tree) Commit() {
-	if tree.Curr != nil {
-		tree.Curr.Commit()
-		tree.Curr = nil
-	} else {
-		panic("Trying to commit nonexisting node to tree")
-	}
+	tree.Curr.AddChild(tree.Speculative)
+	tree.ClearBuffer()
 }
+*/
 
 //ClearBuffer clears the Buffer up until the position
 //
@@ -109,8 +101,8 @@ func (tree *Tree) ClearBuffer() {
 
 //AddNonTerminal adds a non-terminal node to the current subtree being built
 func (tree *Tree) AddNonTerminal(typ NodeType, token lex.Token) Node {
-	if tree.Curr != nil {
-		return tree.Curr.AddNonTerminal(typ, token)
+	if tree.Speculative != nil {
+		return tree.Speculative.AddNonTerminal(typ, token)
 	}
 	return nil
 }
@@ -118,7 +110,7 @@ func (tree *Tree) AddNonTerminal(typ NodeType, token lex.Token) Node {
 //AddTerminal adds a terminal to the current subtree being built
 func (tree *Tree) AddTerminal(typ NodeType, token lex.Token) Node {
 	if tree.Speculative != nil {
-		return tree.Curr.AddTerminal(typ, token)
+		return tree.Speculative.AddTerminal(typ, token)
 	}
 	return nil
 }

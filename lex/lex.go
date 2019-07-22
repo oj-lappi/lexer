@@ -211,6 +211,7 @@ func (l *BaseLexer) IgnoreSpaces() {
 
 //Errorf is used to emit a formatted error
 func (l *BaseLexer) Errorf(format string, args ...interface{}) {
+	//TODO: type switch to turn the runes in args into strings. They are being printed as char codes
 	l.Tokens <- &token{
 		typ:   TokenError,
 		value: fmt.Sprintf(format, args...),

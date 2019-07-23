@@ -16,7 +16,7 @@ type Tree struct {
 	name      string
 	text      string
 	lexer     lex.Lexer
-	parserFun StateFn //The StateFn first called
+	parserFun ParseFn //the parsing entry point
 }
 
 type ParseFn func(*Tree)
@@ -47,8 +47,13 @@ func (tree *Tree) Parse(lexer lex.Lexer) (err error) {
 	}()
 
 	tree.lexer = lexer
-	tree.parserFun()
+	tree.parserFun(tree)
 	return
+}
+
+//CurrentToken returns the token last received from the token stream
+func (tree *Tree) CurrentToken() lex.Token {
+	return tree.Buffer[tree.Pos]
 }
 
 //Next returns the next token from the lexer
@@ -75,7 +80,7 @@ func (tree *Tree) Back() {
 //BackUntil goes back through the buffer until it finds a token of a certain type.
 //Assumes the parser implementation knows that this token exists in the buffer.
 func (tree *Tree) BackUntil(typ lex.TokenType) {
-	for ; tree.Buffer[tree.Pos] != typ; tree.Pos-- {
+	for ; tree.Buffer[tree.Pos].Type() != typ; tree.Pos-- {
 	}
 }
 
@@ -117,7 +122,7 @@ func (tree *Tree) AddNonTerminal(typ NodeType, token lex.Token) Node {
 
 //AddTerminal adds a terminal to the current subtree being built
 func (tree *Tree) AddTerminal(typ NodeType, token lex.Token) Node {
-	if tree.Speculative != nil {
+	if tree.Curr != nil {
 		return tree.Curr.AddTerminal(typ, token)
 	}
 	return nil
@@ -140,14 +145,22 @@ func (tree *Tree) Errorf(format string, args ...interface{}) {
 //
 //The message will also print out the position in the source file which caused the error.
 func (tree *Tree) ErrorAtTokenf(token lex.Token, format string, args ...interface{}) {
-	panic(fmt.Sprintf("%v,%v : ", token.Line(), token.Row()) + fmt.Sprintf(format, args...))
+	panic(
+		fmt.Sprintf("%v,%v : %s\n%s", token.Line(), token.Row(),
+			fmt.Sprintf(format, args...),
+			tree.lexer.TokenInContext(token)))
 }
 
 //Unexpected panics with a message of the form "expected x, got y" for Unexpected(y,x)
 //
 //The order is confusing. TODO:switch order
 func (tree *Tree) Unexpected(unexpected interface{}, expected interface{}) {
-	tree.Errorf("expected %v, got %v.", expected, unexpected)
+	tok, ok := unexpected.(lex.Token)
+	if ok {
+		tree.ErrorAtTokenf(tok, "expected %v, got %v.", expected, unexpected)
+	} else {
+		tree.Errorf("expected %v, got %v.", expected, unexpected)
+	}
 }
 
 //PPrint pretty prints (indents) the parse tree in preorder

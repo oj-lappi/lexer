@@ -164,12 +164,12 @@ func (n *baseNode) String() string {
 }
 
 //AddChild panics, since terminal nodes have no children
-func (n *baseNode) AddChild(nu Node) {
+func (n *baseNode) AddChild(child Node) {
 	if n.isTerminal {
 		n.noChildren("add")
 	} else {
-		n.children = append(n.children, nu)
-		n.setParent(n)
+		n.children = append(n.children, child)
+		child.setParent(n)
 	}
 }
 
@@ -179,8 +179,8 @@ func (n *baseNode) AddChildren(ns []Node) {
 		n.noChildren("add")
 	}
 	n.children = append(n.children, ns...)
-	for _, v := range ns {
-		n.setParent(v)
+	for _, child := range ns {
+		child.setParent(n)
 	}
 }
 
@@ -205,14 +205,15 @@ func (n *baseNode) AddTerminal(typ NodeType, token lex.Token) Node {
 }
 
 //RemoveChild panics, since terminal nodes have no children
-func (n *baseNode) RemoveChild(r Node) {
+func (n *baseNode) RemoveChild(problemChild Node) {
 	if n.isTerminal {
 		n.noChildren("remove")
 	}
 
 	for i, c := range n.children {
-		if c == n {
+		if c == problemChild {
 			n.children = append(n.children[:i], n.children[i+1:]...)
+			problemChild.setParent(nil)
 			return
 		}
 	}
@@ -229,6 +230,8 @@ func (n *baseNode) ReplaceChild(old Node, nu Node) {
 	for i, c := range n.children {
 		if c == n {
 			n.children[i] = nu
+			nu.setParent(n)
+			c.setParent(nil)
 			return
 		}
 	}
@@ -244,7 +247,6 @@ func (n *baseNode) setParent(p Node) {
 //ReplaceWith replaces the Node in the containing tree with another node
 func (n *baseNode) ReplaceWith(nu Node) {
 	n.parent.ReplaceChild(n, nu)
-	n.parent = nil
 }
 
 //END tree manipulation methods
@@ -256,7 +258,7 @@ func (n *baseNode) Commit() {
 
 //CommitSubTree commits all the node and all its children
 func (n *baseNode) CommitSubTree() {
-	b.parseStatus = FullyParsed
+	n.parseStatus = FullyParsed
 	for _, child := range n.children {
 		child.CommitSubTree()
 	}

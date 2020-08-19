@@ -9,6 +9,7 @@ package lex
 
 import (
 	"fmt"
+	"kugg/stringwidth"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -83,12 +84,14 @@ type Lexer interface {
 	Back()
 	Emit(t TokenType)
 	Ignore()
-	IgnoreCountNewLines()
 	IgnoreSpaces()
 	Errorf(format string, args ...interface{})
 	Accept(valid string) bool
+	AcceptSpaces() bool
+	AcceptNonNewlineSpaces() bool
 	AcceptRun(valid string) bool
-	AcceptUntil(valid string) bool
+	AcceptUntil(invalid string) bool
+	AcceptUntilMatchOrRanges(invalid string, ranges ...*unicode.RangeTable) bool
 	AcceptUnicodeRanges(ranges ...*unicode.RangeTable) bool
 	AcceptUnicodeRangeRun(ranges ...*unicode.RangeTable) bool
 	Switch(lookup map[rune]TokenType, fallback TokenType) TokenType
@@ -96,6 +99,10 @@ type Lexer interface {
 	NextToken() Token
 	Drain()
 	Run(StateFn)
+
+	TokenInContext(Token) string //returns two lines of text:
+	//The line in the source containing the token
+	//, and a ^ cursor pointing at the start of the token
 }
 
 //StateFn represents the state and the transitions to new states
@@ -121,15 +128,14 @@ func NewLexer(name, source string) Lexer {
 
 //BaseLexer holds the State of the scanner
 type BaseLexer struct {
-	Name      string
-	Input     string
-	Start     int //Start of current token
-	Pos       int //Scanner position
-	Width     int //Width of current rune
-	StartLine int //Start line of current token
-	Line      int //Scanner line position
-	Tokens    chan Token
-	//err    error //saw this in a config lang implementation
+	Name   string
+	Input  string
+	Start  int //Start of current token
+	Pos    int //Scanner position
+	Width  int //Width of current rune
+	Line   int //Scanner line position
+	Tokens chan Token
+	Lines  map[int]int //Line index -> position in source of first character on line
 }
 
 //Run starts the statemachine of the lexer
@@ -156,6 +162,7 @@ func (l *BaseLexer) Next() rune {
 	l.Pos += l.Width
 	if r == '\n' {
 		l.Line++
+		l.Lines[l.Line] = l.Pos
 	}
 	return r
 }
@@ -182,25 +189,15 @@ func (l *BaseLexer) Emit(t TokenType) {
 		typ:   t,
 		value: l.Input[l.Start:l.Pos],
 		pos:   l.Pos,
-		line:  l.Line,
 		row:   l.Row(),
+		line:  l.Line,
 	}
 	l.Start = l.Pos
-	l.StartLine = l.Line
 }
 
 //Ignore ignores the current token
 func (l *BaseLexer) Ignore() {
 	l.Start = l.Pos
-	l.StartLine = l.Line
-}
-
-//IgnoreCountNewLines should be used if the scanner
-//got to the current Pos without calling Next() or otherwise counting newlines
-func (l *BaseLexer) IgnoreCountNewLines() {
-	l.Line += strings.Count(l.Input[l.Start:l.Pos], "\n")
-	l.Start = l.Pos
-	l.StartLine = l.Line
 }
 
 //IgnoreSpaces will accept all space characters and then throw away the token
@@ -221,8 +218,12 @@ func (l *BaseLexer) Errorf(format string, args ...interface{}) {
 	}
 }
 
+func (l *BaseLexer) UnexpectedRune(unexpected rune, expected interface{}) {
+	l.Errorf("expected %v, got '%c'.", expected, unexpected)
+}
+
 func (l *BaseLexer) Unexpected(unexpected interface{}, expected interface{}) {
-	l.Errorf("expected %v, got %v .", expected, unexpected)
+	l.Errorf("expected %v, got \"%v\".", expected, unexpected)
 }
 
 func (l *BaseLexer) NotAllowedInContext(notAllowed rune, context interface{}) {
@@ -257,6 +258,18 @@ func (l *BaseLexer) AcceptRun(valid string) (found bool) {
 func (l *BaseLexer) AcceptUntil(until string) bool {
 	r := l.Next()
 	for r != EOF && !strings.ContainsRune(until, r) {
+		r = l.Next()
+	}
+	l.Back()
+	return r != EOF
+}
+
+//AcceptUntilMatchOrRanges calls Next() until a rune from the argument string or in the ranges is found
+//
+//It also reports whether a rune was found or not
+func (l *BaseLexer) AcceptUntilMatchOrRanges(until string, ranges ...*unicode.RangeTable) bool {
+	r := l.Next()
+	for r != EOF && !strings.ContainsRune(until, r) && !unicode.In(r, ranges...) {
 		r = l.Next()
 	}
 	l.Back()
@@ -316,6 +329,32 @@ func (l *BaseLexer) AcceptSpaces() (found bool) {
 	return
 }
 
+//AcceptNonNewlineSpaces consumes all space characters except '\n' and '\r'
+func (l *BaseLexer) AcceptNonNewlineSpaces() (found bool) {
+	for IsNonNewlineSpace(l.Next()) {
+		found = true
+	}
+	l.Back()
+	return
+}
+
+//IsNonNewlineSpace returns false for '\r' and '\n', true for other white space characters, and false for other characters
+func IsNonNewlineSpace(r rune) bool {
+	if IsNewline(r) {
+		return false
+	}
+	return unicode.IsSpace(r)
+}
+
+//IsNewline returns true if the rune is '\r' or '\n', false otherwise
+func IsNewline(r rune) bool {
+	switch r {
+	case '\n', '\r':
+		return true
+	}
+	return false
+}
+
 //Switch is a convenience function for multi-rune tokens using a lookup table
 func (l *BaseLexer) Switch(lookup map[rune]TokenType, fallback TokenType) TokenType {
 	v, ok := lookup[l.Peek()]
@@ -327,11 +366,7 @@ func (l *BaseLexer) Switch(lookup map[rune]TokenType, fallback TokenType) TokenT
 
 //Row finds the row of the first rune of the current token
 func (l *BaseLexer) Row() int {
-	lineStart := strings.LastIndex(l.Input[:l.Start], "\n")
-	if lineStart >= 0 {
-		return l.Start - lineStart
-	}
-	return l.Start
+	return l.Start - l.Lines[l.Line]
 }
 
 //NextToken returns the next token from the lexer synchronously
@@ -345,14 +380,34 @@ func (l *BaseLexer) Drain() {
 	}
 }
 
+func (l *BaseLexer) TokenInContext(t Token) string {
+	lineNum := t.Line()
+	b := l.Lines[lineNum]
+	e, ok := l.Lines[lineNum+1]
+	line := ""
+	if !ok {
+		//race condition: The lexer hasn't gotten to the next line yet, so we find it
+		o := strings.IndexRune(l.Input[b:], '\n')
+		if o > 0 {
+			line = l.Input[b : b+o]
+		} else {
+			line = l.Input[b:]
+		}
+	} else {
+		line = l.Input[b : e-1]
+	}
+	spaces := stringwidth.InSpaces(line[:t.Row()])
+	return line + "\n" + strings.Repeat(" ", spaces-1) + "^"
+}
+
 //Lex creates a new scanner (BaseLexer) for an input string
 func Lex(name string, input string) *BaseLexer {
 	l := &BaseLexer{
-		Name:      name,
-		Input:     input,
-		Tokens:    make(chan Token),
-		Line:      1,
-		StartLine: 1,
+		Name:   name,
+		Input:  input,
+		Tokens: make(chan Token),
+		Line:   1,
+		Lines:  map[int]int{},
 	}
 	return l
 }

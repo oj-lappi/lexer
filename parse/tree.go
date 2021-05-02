@@ -3,6 +3,8 @@ package parse
 import (
 	"fmt"
 	"kugg/compilers/lex"
+
+	"go.uber.org/zap"
 )
 
 type Tree struct {
@@ -20,6 +22,13 @@ type Tree struct {
 }
 
 type ParseFn func(*Tree)
+
+var logger *zap.SugaredLogger
+
+func init() {
+	logger_, _ := zap.NewDevelopment()
+	logger = logger_.Sugar()
+}
 
 func NewTree(name, text string, start ParseFn) *Tree {
 	tree := &Tree{
@@ -114,6 +123,7 @@ func (tree *Tree) ClearBuffer() {
 
 //AddNonTerminal adds a non-terminal node to the current subtree being built
 func (tree *Tree) AddNonTerminal(typ NodeType, token lex.Token) Node {
+	logger.Infof("New nonterminal %v node %v", typ, token)
 	if tree.Curr != nil {
 		return tree.Curr.AddNonTerminal(typ, token)
 	}
@@ -122,6 +132,7 @@ func (tree *Tree) AddNonTerminal(typ NodeType, token lex.Token) Node {
 
 //AddTerminal adds a terminal to the current subtree being built
 func (tree *Tree) AddTerminal(typ NodeType, token lex.Token) Node {
+	logger.Infof("New terminal %v node %v", typ, token)
 	if tree.Curr != nil {
 		return tree.Curr.AddTerminal(typ, token)
 	}
@@ -157,7 +168,7 @@ func (tree *Tree) ErrorAtTokenf(token lex.Token, format string, args ...interfac
 func (tree *Tree) Unexpected(unexpected interface{}, expected interface{}) {
 	tok, ok := unexpected.(lex.Token)
 	if ok {
-		tree.ErrorAtTokenf(tok, "expected %v, got %v.", expected, unexpected)
+		tree.ErrorAtTokenf(tok, "expected %v, got %v (type:%v).", expected, unexpected, tok.Type())
 	} else {
 		tree.Errorf("expected %v, got %v.", expected, unexpected)
 	}

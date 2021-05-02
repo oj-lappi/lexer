@@ -28,7 +28,7 @@ var NodeNames = map[NodeType]string{
 func (nt NodeType) String() string {
 	s, ok := NodeNames[nt]
 	if !ok {
-		return fmt.Sprintf("%i", int(nt))
+		return fmt.Sprintf("NodeType(%d)", int(nt))
 	}
 	return s
 }

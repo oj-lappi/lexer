@@ -1,46 +1,56 @@
 package lex
 
-/*
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
 
-func DeserializeTokenStream(tokenNames map[TokenType]string, text string) []Token {
+func DeserializeTokens(tokenNames map[TokenType]string, text string) []Token {
 
-	var tokType map[string]TokenType
+	tokType := make(map[string]TokenType)
 
 	for k, v := range tokenNames {
 		tokType[v] = k
 	}
 
 	var tokens []Token
-	for line := range strings.Split(text, "\n") {
+	for _, line := range strings.Split(text, "\n") {
 		var cols []string
-		for col := range strings.Split(line, ":") {
-			cols.append(col.Trim(" \t"))
+		//Ignore empty lines
+		if strings.Trim(line, " \t") == "" {
+			continue
+		}
+		for _, col := range strings.Split(line, ":") {
+			cols = append(cols, strings.Trim(col, " \t"))
 		}
 
 		var tok token
-		switch cols.len {
+		switch len(cols) {
 		case 2:
 			tok.value = cols[1]
+			fallthrough
 		case 1:
-			tok.typ = tokType[cols[0]]
+			var ok bool
+			tok.typ, ok = tokType[cols[0]]
+			if !ok {
+				//TODO: error out
+				fmt.Printf("No token named \"%s\" in lookup table.\n", cols[0])
+			}
 		}
-		tokens.append(tok)
+		tokens = append(tokens, &tok)
 	}
 	return tokens
 }
 
-func SerializeTokenStream(tokenNames map[TokenType]string, tokens []Token) string {
+func SerializeTokens(tokenNames map[TokenType]string, tokens []Token) string {
 	var str string
-	for tok := range tokens {
+	for _, tok := range tokens {
 		name, ok := tokenNames[tok.Type()]
 		if ok {
 			str += name
 		} else {
-			str += strconv.Itoa(tok.Type())
+			str += strconv.Itoa(int(tok.Type()))
 		}
 
 		if tok.Lexeme() != "" {
@@ -51,4 +61,3 @@ func SerializeTokenStream(tokenNames map[TokenType]string, tokens []Token) strin
 	}
 	return str
 }
-*/

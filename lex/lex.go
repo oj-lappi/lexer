@@ -1,6 +1,6 @@
 package lex
 
-//This Lexer is influenced by RobPikes lecture on lexical analyzers for a templating language[0] and the corresponding source[1]
+//This Lexer is influenced by Rob Pikes lecture on lexical analyzers for a templating language[0] and the corresponding source[1]
 
 //[0]:	https://www.youtube.com/watch?v=HxaD_trXwRE
 //[1]:	https://golang.org/src/text/template/parse/lex.go
@@ -21,16 +21,16 @@ type TokenType int
 //These special tokentypes are declared as negative ints.
 //This is so that scanners can declare their own TokenTypes from iota
 const (
-	TokenError TokenType = -(1 + iota) //A scan error emitted by Errorf
-	TokenEOF
+	LexingError TokenType = -(1 + iota) //A scan error emitted by Errorf
+	EOF_Token
 )
 
 //TokenNames will be used whenever printing a Token of the given TokenType.
 //
 //Populate this if you want nice printouts.
 var TokenNames = map[TokenType]string{
-	TokenError: "error",
-	TokenEOF:   "EOF",
+	LexingError: "LexingError",
+	EOF_Token:   "EOF_Token",
 }
 
 //Token is a token as scanned by the scanner
@@ -52,15 +52,15 @@ type token struct {
 }
 
 func (t *token) String() string {
+	name := TokenNames[t.typ]
 	switch {
-	case t.typ == TokenEOF:
-		return "EOF"
-	case t.typ == TokenError:
-		return fmt.Sprintf("%v:%v %v", t.line, t.row, t.value)
+	case t.typ == LexingError:
+		return fmt.Sprintf("%v(%v:%v %v)", name, t.line, t.row, t.value)
 	case len(t.value) > 10:
-		return fmt.Sprintf("%10q...", t.value)
+		return fmt.Sprintf("%v(%10q...)", name, t.value)
+	default:
+		return fmt.Sprintf("%v(%q)", name, t.value)
 	}
-	return fmt.Sprintf("%q", t.value)
 }
 
 func (t *token) Type() TokenType {
@@ -218,7 +218,7 @@ func (l *BaseLexer) IgnoreSpaces() {
 func (l *BaseLexer) Errorf(format string, args ...interface{}) {
 	//TODO: type switch to turn the runes in args into strings. They are being printed as char codes
 	l.Tokens <- &token{
-		typ:   TokenError,
+		typ:   LexingError,
 		value: fmt.Sprintf(format, args...),
 		pos:   l.Pos,
 		line:  l.Line,

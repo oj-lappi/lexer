@@ -93,6 +93,7 @@ type Lexer interface {
 	Emit(t TokenType)
 	Ignore()
 	IgnoreSpaces()
+	IgnoreNonNewlineSpaces()
 	Errorf(format string, args ...interface{})
 	Accept(valid string) bool
 	AcceptSpaces() bool
@@ -211,6 +212,12 @@ func (l *BaseLexer) Ignore() {
 //IgnoreSpaces will accept all space characters and then throw away the token
 func (l *BaseLexer) IgnoreSpaces() {
 	l.AcceptSpaces()
+	l.Ignore()
+}
+
+//IgnoreSpaces will accept all non-newline space characters and then throw away the token
+func (l *BaseLexer) IgnoreNonNewlineSpaces() {
+	l.AcceptNonNewlineSpaces()
 	l.Ignore()
 }
 

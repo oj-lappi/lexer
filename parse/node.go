@@ -17,7 +17,7 @@ const (
 //
 //Populate this if you want nice printouts.
 var NodeNames = map[NodeType]string{
-	RootNode: "root",
+	RootNode: "RootNode",
 }
 
 //String returns a string representation of the NodeType,

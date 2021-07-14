@@ -15,6 +15,24 @@ import (
 	"unicode/utf8"
 )
 
+//TokenType is an integer identifying a specific type of token
+type TokenType int
+
+//These special tokentypes are declared as negative ints.
+//This is so that scanners can declare their own TokenTypes from iota
+const (
+	TokenError TokenType = -(1 + iota) //A scan error emitted by Errorf
+	TokenEOF
+)
+
+//TokenNames will be used whenever printing a Token of the given TokenType.
+//
+//Populate this if you want nice printouts.
+var TokenNames = map[TokenType]string{
+	TokenError: "error",
+	TokenEOF:   "EOF",
+}
+
 //Token is a token as scanned by the scanner
 type Token interface {
 	Type() TokenType
@@ -60,16 +78,6 @@ func (t *token) Row() int {
 func (t *token) Line() int {
 	return t.line
 }
-
-//TokenType is an integer identifying a specific type of token
-type TokenType int
-
-//These special tokentypes are declared as negative ints.
-//This is so that scanners can declare their own TokenTypes from iota
-const (
-	TokenError TokenType = -(1 + iota) //A scan error emitted by Errorf
-	TokenEOF
-)
 
 const (
 	Spaces = " \t\r\n"

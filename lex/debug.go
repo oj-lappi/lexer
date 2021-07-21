@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+func DebugToken(typ TokenType, value string) Token {
+	return &token{typ: typ, value: value}
+}
+
 func DeserializeTokens(tokenNames map[TokenType]string, text string) []Token {
 
 	tokType := make(map[string]TokenType)

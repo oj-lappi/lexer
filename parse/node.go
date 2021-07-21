@@ -62,7 +62,8 @@ type Node interface {
 	RollBack()      //RollBack removes all speculative nodes in a subtree
 
 	//Methods for formatting
-	PPrint(indent int) //PPrint pretty prints the parse tree in preorder
+	PPrint(indent int)           //PPrint pretty prints the parse tree in preorder
+	SPPrint(indent int) []string //SPPrint pretty prints the parse tree in preorder in a []string
 	String() string
 }
 
@@ -279,7 +280,17 @@ func (n *baseNode) RollBack() {
 //PPrint prints the tree indented, left to right
 func (n *baseNode) PPrint(indent int) {
 	fmt.Println(strings.Repeat("  ", indent), n)
-	for _, v := range n.children {
-		v.PPrint(indent + 1)
+	for _, child := range n.children {
+		child.PPrint(indent + 1)
 	}
+}
+
+//SPPrint produces a pretty-printed, indented slice of strings representing the tree
+func (n *baseNode) SPPrint(indent int) []string {
+	ret := make([]string, 1)
+	ret[0] = fmt.Sprintf("%s%v", strings.Repeat("  ", indent), n)
+	for _, child := range n.children {
+		ret = append(ret, child.SPPrint(indent+1)...)
+	}
+	return ret
 }

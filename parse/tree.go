@@ -178,3 +178,8 @@ func (tree *Tree) Unexpected(unexpected interface{}, expected interface{}) {
 func (tree *Tree) PPrint() {
 	tree.Root.PPrint(0)
 }
+
+//SPPrint pretty prints (indents) the parse tree in preorder in a []string
+func (tree *Tree) SPPrint() []string {
+	return tree.Root.SPPrint(0)
+}

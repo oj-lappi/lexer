@@ -379,9 +379,14 @@ func (l *BaseLexer) Switch(lookup map[rune]TokenType, fallback TokenType) TokenT
 	return v
 }
 
+//TODO: clearly Row should be Column, right?
 //Row finds the row of the first rune of the current token
 func (l *BaseLexer) Row() int {
-	return l.Start - l.Lines[l.Line]
+	ret := l.Start - l.Lines[l.Line]
+	if ret < 0 {
+		return 0
+	}
+	return ret
 }
 
 //NextToken returns the next token from the lexer synchronously
@@ -402,6 +407,7 @@ func (l *BaseLexer) TokenInContext(t Token) string {
 	line := ""
 	if !ok {
 		//race condition: The lexer hasn't gotten to the next line yet, so we find it
+		//issue if token is a newline?
 		o := strings.IndexRune(l.Input[b:], '\n')
 		if o > 0 {
 			line = l.Input[b : b+o]
@@ -411,6 +417,8 @@ func (l *BaseLexer) TokenInContext(t Token) string {
 	} else {
 		line = l.Input[b : e-1]
 	}
+	//TODO:Boundserror here:
+	//TODO:rip out stringwidth from codebase
 	spaces := stringwidth.InSpaces(line[:t.Row()])
 	return line + "\n" + strings.Repeat(" ", spaces-1) + "^"
 }

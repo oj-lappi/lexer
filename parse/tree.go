@@ -3,6 +3,7 @@ package parse
 import (
 	"fmt"
 	"kugg/compilers/lex"
+	"runtime"
 
 	"go.uber.org/zap"
 )
@@ -51,7 +52,12 @@ func (tree *Tree) Parse(lexer lex.Lexer) (err error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%v\n", r)
+			switch r.(type) {
+			case runtime.Error:
+				panic(r)
+			default:
+				err = fmt.Errorf("%v\n", r)
+			}
 		}
 	}()
 

@@ -131,14 +131,14 @@ type StateFn func(*BaseLexer) StateFn
 /*
 //NewLexer returns a new Lexer with the given name and source
 func NewLexer(name, source string) Lexer {
-	return &BaseLexer{Name: name, Input: source}
+	return &BaseLexer{Name: name, Source: source}
 }
 */
 
 //BaseLexer holds the State of the scanner
 type BaseLexer struct {
 	Name   string
-	Input  string
+	Source string
 	Start  int //Start of current token
 	Pos    int //Scanner position
 	Width  int //Width of current rune
@@ -161,12 +161,12 @@ func (l *BaseLexer) Run(state StateFn) {
 
 //Next returns the next rune in the source
 func (l *BaseLexer) Next() rune {
-	if l.Pos >= len(l.Input) {
+	if l.Pos >= len(l.Source) {
 		l.Width = 0
 		return EOF
 	}
 
-	r, w := utf8.DecodeRuneInString(l.Input[l.Pos:])
+	r, w := utf8.DecodeRuneInString(l.Source[l.Pos:])
 	l.Width = w
 	l.Pos += l.Width
 	if r == '\n' {
@@ -187,7 +187,7 @@ func (l *BaseLexer) Peek() rune {
 func (l *BaseLexer) Back() {
 	l.Pos -= l.Width
 	// Correct newline count.
-	if l.Width == 1 && l.Input[l.Pos] == '\n' {
+	if l.Width == 1 && l.Source[l.Pos] == '\n' {
 		l.Line--
 	}
 }
@@ -196,7 +196,7 @@ func (l *BaseLexer) Back() {
 func (l *BaseLexer) Emit(t TokenType) {
 	l.Tokens <- &token{
 		typ:   t,
-		value: l.Input[l.Start:l.Pos],
+		value: l.Source[l.Start:l.Pos],
 		pos:   l.Pos,
 		row:   l.Row(),
 		line:  l.Line,
@@ -408,14 +408,14 @@ func (l *BaseLexer) TokenInContext(t Token) string {
 	if !ok {
 		//race condition: The lexer hasn't gotten to the next line yet, so we find it
 		//issue if token is a newline?
-		o := strings.IndexRune(l.Input[b:], '\n')
+		o := strings.IndexRune(l.Source[b:], '\n')
 		if o > 0 {
-			line = l.Input[b : b+o]
+			line = l.Source[b : b+o]
 		} else {
-			line = l.Input[b:]
+			line = l.Source[b:]
 		}
 	} else {
-		line = l.Input[b : e-1]
+		line = l.Source[b : e-1]
 	}
 	//TODO:Boundserror here:
 	//TODO:rip out stringwidth from codebase
@@ -423,11 +423,11 @@ func (l *BaseLexer) TokenInContext(t Token) string {
 	return line + "\n" + strings.Repeat(" ", spaces-1) + "^"
 }
 
-//Lex creates a new scanner (BaseLexer) for an input string
-func Lex(name string, input string) *BaseLexer {
+//Lex creates a new scanner (BaseLexer) for a source string
+func Lex(name string, source string) *BaseLexer {
 	l := &BaseLexer{
 		Name:   name,
-		Input:  input,
+		Source: source,
 		Tokens: make(chan Token),
 		Line:   1,
 		Lines:  map[int]int{},

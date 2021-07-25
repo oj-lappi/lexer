@@ -27,7 +27,7 @@ type ParseFn func(*Tree)
 var logger *zap.SugaredLogger
 
 func init() {
-	logger_, _ := zap.NewDevelopment()
+	logger_, _ := zap.NewProduction()
 	logger = logger_.Sugar()
 }
 
@@ -129,7 +129,7 @@ func (tree *Tree) ClearBuffer() {
 
 //AddNonTerminal adds a non-terminal node to the current subtree being built
 func (tree *Tree) AddNonTerminal(typ NodeType, token lex.Token) Node {
-	logger.Infof("New nonterminal %v node %v", typ, token)
+	logger.Debugf("New nonterminal %v node %v", typ, token)
 	if tree.Curr != nil {
 		return tree.Curr.AddNonTerminal(typ, token)
 	}
@@ -138,7 +138,7 @@ func (tree *Tree) AddNonTerminal(typ NodeType, token lex.Token) Node {
 
 //AddTerminal adds a terminal to the current subtree being built
 func (tree *Tree) AddTerminal(typ NodeType, token lex.Token) Node {
-	logger.Infof("New terminal %v node %v", typ, token)
+	logger.Debugf("New terminal %v node %v", typ, token)
 	if tree.Curr != nil {
 		return tree.Curr.AddTerminal(typ, token)
 	}

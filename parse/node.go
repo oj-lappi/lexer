@@ -3,6 +3,7 @@ package parse
 import (
 	"fmt"
 	"kugg/compilers/lex"
+	"kugg/compilers/symbol"
 	"strings"
 )
 
@@ -42,6 +43,11 @@ type Node interface {
 	Children() []Node
 	Tree() *Tree
 	FirstUncommittedAncestor(NodeType) Node
+
+	//Methods for querying and manipulating symbol tables
+	Scope() *symbol.Table
+	Symbol() *symbol.Symbol
+	CreateSymbol(string) (*symbol.Symbol, error)
 
 	Status() parseStatus
 	IsTerminal() bool
@@ -83,6 +89,8 @@ type baseNode struct {
 	tree        *Tree
 	parseStatus parseStatus
 	isTerminal  bool
+	scope       *symbol.Table
+	symbol      *symbol.Symbol
 }
 
 //NewNonTerminal creates a new non-terminal node
@@ -92,7 +100,10 @@ func NewNonTerminal(typ NodeType, firstToken lex.Token, tree *Tree) Node {
 		tree:       tree,
 		token:      firstToken,
 		children:   make([]Node, 0, 0),
-		isTerminal: false}
+		isTerminal: false,
+		scope:      tree.CurrScope,
+		symbol:     nil,
+	}
 }
 
 //NewTerminal creates a new terminal node
@@ -101,8 +112,10 @@ func NewTerminal(typ NodeType, token lex.Token, tree *Tree) Node {
 		typ:        typ,
 		tree:       tree,
 		token:      token,
-		isTerminal: true}
-
+		isTerminal: true,
+		scope:      tree.CurrScope,
+		symbol:     nil,
+	}
 }
 
 //panic because someone is trying to use a terminal node as a nonterminal node
@@ -128,6 +141,30 @@ func (b *baseNode) Parent() Node {
 //Tree returns the containing Tree
 func (b *baseNode) Tree() *Tree {
 	return b.tree
+}
+
+//Scope returns the scope of a node
+func (b *baseNode) Scope() *symbol.Table {
+	if b == nil {
+		return nil
+	}
+	return b.scope
+}
+
+//Symbol returns the symbol associated with the node
+func (b *baseNode) Symbol() *symbol.Symbol {
+	return b.symbol
+}
+
+//SetSymbol sets the symbol of
+func (b *baseNode) CreateSymbol(name string) (*symbol.Symbol, error) {
+	sym, err := b.scope.Add(name)
+	if err != nil {
+		return sym, err
+	}
+
+	b.symbol = sym
+	return sym, nil
 }
 
 //FirstUncommittedAncestor gets the first ancestor of a specific type that has not been fully parsed yet.

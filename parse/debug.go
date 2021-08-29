@@ -10,7 +10,6 @@ import (
 func DeserializeTree(nodeNames map[NodeType]string, tokenNames map[lex.TokenType]string, text []byte) *Tree {
 
 	m := make(map[string]interface{})
-
 	err := yaml.Unmarshal(text, &m)
 
 	if err != nil {
@@ -37,23 +36,23 @@ func DeserializeTree(nodeNames map[NodeType]string, tokenNames map[lex.TokenType
 			nodeTokTyp lex.TokenType
 			lexeme     string
 		)
-		for k, v := range yamlNode {
-			switch k {
+		for key, prop := range yamlNode {
+			switch key {
 			case "node":
-				treeNode.typ = nodeType[v.(string)]
+				treeNode.typ = nodeType[prop.(string)]
 
 			case "token":
-				nodeTokTyp = tokType[v.(string)]
+				nodeTokTyp = tokType[prop.(string)]
 				hasToken = true
 			case "lexeme":
-				lexeme = v.(string)
+				lexeme = prop.(string)
 			case "children":
-				for _, c := range v.([]interface{}) {
-					switch c := c.(type) {
+				for _, child := range prop.([]interface{}) {
+					switch child := child.(type) {
 					case map[string]interface{}:
-						treeNode.AddChild(walkYAMLtree(c))
+						treeNode.AddChild(walkYAMLtree(child))
 					default:
-						panic(fmt.Sprintf("Error walking deserialized YAML AST: expected children to be map[string]interface{}, but is %T:%v\n", c, c))
+						panic(fmt.Sprintf("Error walking deserialized YAML AST: expected children to be map[string]interface{}, but is %T:%v\n", child, child))
 					}
 				}
 

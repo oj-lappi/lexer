@@ -3,14 +3,16 @@ package parse
 import (
 	"fmt"
 	"kugg/compilers/lex"
+	"kugg/compilers/symbol"
 	"runtime"
 
 	"go.uber.org/zap"
 )
 
 type Tree struct {
-	Root      Node        //Root of the parse tree
-	Curr      Node        //Current node,
+	Root      Node //Root of the parse tree
+	Curr      Node //Current node,
+	CurrScope *symbol.Table
 	Buffer    []lex.Token //Full token stream
 	NameSpace []string    //Current scope
 	Pos       int         //Position of Current token in Buffer
@@ -41,6 +43,7 @@ func NewTree(name, text string, start ParseFn) *Tree {
 		Pos:       -1,
 	}
 
+	tree.CurrScope = symbol.NewGlobalScope()
 	tree.Root = NewNonTerminal(RootNode, nil, tree)
 	tree.Curr = tree.Root
 

@@ -9,7 +9,7 @@ package lex
 
 import (
 	"fmt"
-	"kugg/stringwidth"
+	"kugg/compilers/util"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -109,6 +109,7 @@ type Lexer interface {
 	Drain()
 	Run(StateFn)
 
+	CurrentLexeme() string
 	TokenInContext(Token) string //returns two lines of text:
 	//The line in the source containing the token
 	//, and a ^ cursor pointing at the start of the token
@@ -202,6 +203,16 @@ func (l *BaseLexer) Emit(t TokenType) {
 		line:  l.Line,
 	}
 	l.Start = l.Pos
+}
+
+func (l *BaseLexer) CheckForbiddenWords(forbidden []string) bool {
+	word := l.Source[l.Start:l.Pos]
+	for _, w := range forbidden {
+		if word == w {
+			return false
+		}
+	}
+	return true
 }
 
 //Ignore ignores the current token
@@ -400,6 +411,10 @@ func (l *BaseLexer) Drain() {
 	}
 }
 
+func (l *BaseLexer) CurrentLexeme() string {
+	return l.Source[l.Start:l.Pos]
+}
+
 func (l *BaseLexer) TokenInContext(t Token) string {
 	lineNum := t.Line()
 	b := l.Lines[lineNum]
@@ -418,8 +433,7 @@ func (l *BaseLexer) TokenInContext(t Token) string {
 		line = l.Source[b : e-1]
 	}
 	//TODO:Boundserror here:
-	//TODO:rip out stringwidth from codebase
-	spaces := stringwidth.InSpaces(line[:t.Row()])
+	spaces := util.StringWidth(line[:t.Row()])
 	return line + "\n" + strings.Repeat(" ", spaces-1) + "^"
 }
 

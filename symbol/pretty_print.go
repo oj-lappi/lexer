@@ -2,38 +2,9 @@ package symbol
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
-
-//TODO: duplication... maybe simplify? or make pprint use spprint
-func (sym *Symbol) pprint(indent int) {
-	indent_step := "  "
-	out_prefix := strings.Repeat(indent_step, indent)
-	in_prefix := strings.Repeat(indent_step, indent+1)
-
-	fmt.Printf("%s{\n%sname:%q\n", out_prefix, in_prefix, sym.Name)
-	fmt.Printf("%sid:%d\n", in_prefix, sym.Id)
-
-	{ //Print attributes
-		no_attrs := true
-		for k, v := range sym.Attributes {
-			if no_attrs {
-				fmt.Printf("%sattributes:\n%s(\n", in_prefix, in_prefix)
-				no_attrs = false
-			}
-			fmt.Printf("%s%s%q:%v\n", in_prefix, indent_step, k, v)
-		}
-		if !no_attrs {
-			fmt.Printf("%s)\n", in_prefix)
-		}
-	}
-	if sym.NameSpace.nextId != 0 {
-		fmt.Printf("%snamespace:\n%s[\n", in_prefix, in_prefix)
-		sym.NameSpace.pprint(indent + 2)
-		fmt.Printf("%s]\n", in_prefix)
-	}
-	fmt.Printf("%s},\n", out_prefix)
-}
 
 func (sym *Symbol) spprint(indent int) []string {
 	ret := make([]string, 0, 4)
@@ -42,10 +13,23 @@ func (sym *Symbol) spprint(indent int) []string {
 	in_prefix := strings.Repeat(indent_step, indent+1)
 	ret = append(ret, fmt.Sprintf("%s{", out_prefix))
 	ret = append(ret, fmt.Sprintf("%sname:%q", in_prefix, sym.Name))
-	ret = append(ret, fmt.Sprintf("%sid:%d", in_prefix, sym.Id))
+	ret = append(ret, fmt.Sprintf("%slocal id:%d", in_prefix, sym.LocalId))
+	ret = append(ret, fmt.Sprintf("%sglobal id:%d", in_prefix, sym.GlobalId))
 	{ //Attributes
 		no_attrs := true
-		for k, v := range sym.Attributes {
+		//Sort keys for micro_optimisation
+		//Micro-optimisation: would like to reuse this array instead of allocating again and again
+		attr_keys := make([]string, len(sym.Attributes))
+
+		i := 0
+		for k := range sym.Attributes {
+			attr_keys[i] = k
+			i++
+		}
+		sort.Strings(attr_keys)
+
+		for _, k := range attr_keys {
+			v := sym.Attributes[k]
 			if no_attrs {
 				ret = append(ret, fmt.Sprintf("%sattributes:", in_prefix))
 				ret = append(ret, fmt.Sprintf("%s(", in_prefix))
@@ -70,14 +54,8 @@ func (sym *Symbol) spprint(indent int) []string {
 
 //Pretty print symtab
 func (table *Table) PPrint() {
-	table.pprint(0)
-}
-
-//Pretty print helper
-func (table *Table) pprint(indent int) {
-	for _, sym := range table.symbols {
-		sym.pprint(indent)
-	}
+	strs := table.SPPrint()
+	fmt.Println(strings.Join(strs, "\n"))
 }
 
 func (table *Table) SPPrint() []string {
@@ -86,8 +64,12 @@ func (table *Table) SPPrint() []string {
 
 func (table *Table) spprint(indent int) []string {
 	ret := make([]string, 0)
-	for _, sym := range table.symbols {
-		ret = append(ret, sym.spprint(indent)...)
+	for id := uint(0); id < table.NumSymbols(); id++ {
+		sym, ok := table.ByLocalId(id)
+		if ok {
+			ret = append(ret, sym.spprint(indent)...)
+		}
+		//else panic?
 	}
 	return ret
 }

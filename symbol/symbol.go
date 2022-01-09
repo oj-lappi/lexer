@@ -6,40 +6,50 @@ import (
 
 type Symbol struct {
 	Name       string
+	LocalId    uint
+	GlobalId   uint
 	Attributes map[string]interface{}
 	NameSpace  *Table
 	Scope      *Table
-	Id         uint
 }
 
 type Table struct {
-	Parent *Table
-	//Children []*Table //??? possibly needed for debugging
-	symbols map[uint]*Symbol
-	names   map[uint]string
-	ids     map[string]uint
-	nextId  uint
+	Parent   *Table
+	Children []*Table
+
+	symbols_by_name      map[string]*Symbol
+	symbols_by_local_id  map[uint]*Symbol
+	symbols_by_global_id map[uint]*Symbol
+	nextId               uint
 }
 
 func (table *Table) NumSymbols() uint {
 	return table.nextId
 }
 
-func (table *Table) ById(id uint) (*Symbol, bool) {
-	sym, ok := table.symbols[id]
+func (table *Table) ByLocalId(id uint) (*Symbol, bool) {
+	sym, ok := table.symbols_by_local_id[id]
+	if ok {
+		return sym, true
+	}
+	return nil, false
+}
+
+func (table *Table) ByGlobalId(id uint) (*Symbol, bool) {
+	sym, ok := table.symbols_by_global_id[id]
 	if ok {
 		return sym, true
 	}
 	if table.Parent != nil {
-		return table.Parent.ById(id)
+		return table.Parent.ByGlobalId(id)
 	}
 	return nil, false
 }
 
 func (table *Table) ByName(name string) (*Symbol, bool) {
-	id, ok := table.ids[name]
+	sym, ok := table.symbols_by_name[name]
 	if ok {
-		return table.symbols[id], true
+		return sym, true
 	}
 	if table.Parent != nil {
 		return table.Parent.ByName(name)
@@ -54,11 +64,10 @@ func (table *Table) ByQualifiedName(name []string) (*Symbol, bool) {
 	t := table
 
 	for len(name) > 0 {
-		id, ok := t.ids[name[0]]
+		sym, ok := t.symbols_by_name[name[0]]
 		if !ok {
 			break
 		}
-		sym := t.symbols[id]
 		if len(name) == 1 {
 			return sym, true
 		}
@@ -71,42 +80,27 @@ func (table *Table) ByQualifiedName(name []string) (*Symbol, bool) {
 	return nil, false
 }
 
-/*
-func (table *Table) LocalSymbolById(id uint) (*Symbol, bool) {
-	sym, ok := table.symbols[id]
-	return sym, ok
-}
-
-func (table *Table) LocalSymbolByName(name string) (*Symbol, bool) {
-	id, ok := table.ids[name]
-	if ok {
-		return table.symbols[id], true
-	}
-	return nil, false
-}
-*/
-
 //Add a symbol with a scope
 func (table *Table) Add(name string) (*Symbol, error) {
-	_, exists := table.ids[name]
+	_, exists := table.symbols_by_name[name]
 	if exists {
 		return nil, fmt.Errorf("Name %q already defined in current scope")
 	}
 
 	ns := table.SubScope()
-	id := table.nextId
+	local_id := table.nextId
 
 	sym := &Symbol{
 		Name:       name,
+		LocalId:    local_id,
+		GlobalId:   0,
 		Attributes: make(map[string]interface{}),
 		NameSpace:  ns,
 		Scope:      table,
-		Id:         id,
 	}
 
-	table.symbols[id] = sym
-	table.ids[name] = id
-	table.names[id] = name
+	table.symbols_by_name[name] = sym
+	table.symbols_by_local_id[local_id] = sym
 
 	table.nextId++
 
@@ -115,22 +109,51 @@ func (table *Table) Add(name string) (*Symbol, error) {
 
 //Add a lower level scope
 func (table *Table) SubScope() *Table {
-	return &Table{
-		Parent:  table,
-		symbols: make(map[uint]*Symbol),
-		names:   make(map[uint]string),
-		ids:     make(map[string]uint),
-		nextId:  0,
+	new_tab := &Table{
+		Parent:               table,
+		Children:             make([]*Table, 0),
+		symbols_by_name:      make(map[string]*Symbol),
+		symbols_by_local_id:  make(map[uint]*Symbol),
+		symbols_by_global_id: make(map[uint]*Symbol),
+		nextId:               0,
 	}
+	table.Children = append(table.Children, new_tab)
+	return new_tab
+}
+
+//Recursively sets globally unique symbol ids for symbol tables
+func (table *Table) ResolveGlobalIds() error {
+	if table.Parent != nil {
+		return nil
+	}
+	table.resolve_ids(0)
+
+	//TODO: resolve symtabs not attached to symbols
+	return nil
+
+}
+
+func (table *Table) resolve_ids(global_offset uint) uint {
+	for i := uint(0); i < table.NumSymbols(); i++ {
+		sym := table.symbols_by_local_id[i]
+		//Set the global id
+		sym.GlobalId = sym.LocalId + global_offset
+		table.symbols_by_global_id[sym.GlobalId] = sym
+		//Recurse
+		sym.NameSpace.resolve_ids(global_offset + i + 1)
+		global_offset += sym.NameSpace.nextId
+	}
+	return global_offset
 }
 
 //Create a global level symtab
 func NewGlobalScope() *Table {
 	return &Table{
-		Parent:  nil,
-		symbols: make(map[uint]*Symbol),
-		names:   make(map[uint]string),
-		ids:     make(map[string]uint),
-		nextId:  0,
+		Parent:               nil,
+		Children:             make([]*Table, 0),
+		symbols_by_name:      make(map[string]*Symbol),
+		symbols_by_local_id:  make(map[uint]*Symbol),
+		symbols_by_global_id: make(map[uint]*Symbol),
+		nextId:               0,
 	}
 }

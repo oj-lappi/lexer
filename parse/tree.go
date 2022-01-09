@@ -66,6 +66,7 @@ func (tree *Tree) Parse(lexer lex.Lexer) (err error) {
 
 	tree.lexer = lexer
 	tree.parserFun(tree)
+	tree.Root.Scope().ResolveGlobalIds()
 	return
 }
 

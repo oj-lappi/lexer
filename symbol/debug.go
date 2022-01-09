@@ -6,7 +6,11 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-func DeserializeSymTab(text []byte) *Table {
+//The type AttributeFunction is used to pass in filter functions that transform YAML output
+//into more domain-specific types
+type AttributeFunction func(key string, val interface{}) interface{}
+
+func DeserializeSymTab(text []byte, attribute_func AttributeFunction) *Table {
 
 	m := make(map[string]interface{})
 	err := yaml.Unmarshal(text, &m)
@@ -20,14 +24,15 @@ func DeserializeSymTab(text []byte) *Table {
 	var walkYAML func(map[string]interface{}, *Table)
 	walkYAML = func(yamlSymbol map[string]interface{}, tab *Table) {
 
-		id := tab.nextId
+		local_id := tab.nextId
 
 		sym := &Symbol{
 			Name:       "",
 			Attributes: make(map[string]interface{}),
 			NameSpace:  tab.SubScope(),
 			Scope:      tab,
-			Id:         id,
+			LocalId:    local_id,
+			GlobalId:   0,
 		}
 		for key, prop := range yamlSymbol {
 			switch key {
@@ -35,7 +40,7 @@ func DeserializeSymTab(text []byte) *Table {
 				sym.Name = prop.(string)
 			case "attributes":
 				for attr, attr_val := range prop.(map[string]interface{}) {
-					sym.Attributes[attr] = attr_val
+					sym.Attributes[attr] = attribute_func(attr, attr_val)
 				}
 			case "namespace":
 				for _, child := range prop.([]interface{}) {
@@ -52,13 +57,13 @@ func DeserializeSymTab(text []byte) *Table {
 		if sym.Name == "" {
 			panic(fmt.Sprintf("Unnamed symbol when deserializing symtab: %v\n", yamlSymbol))
 		}
-		tab.symbols[id] = sym
-		tab.ids[sym.Name] = id
-		tab.names[id] = sym.Name
+		tab.symbols_by_local_id[local_id] = sym
+		tab.symbols_by_name[sym.Name] = sym
 		tab.nextId++
 	}
 
 	walkYAML(m, symtab)
+	symtab.ResolveGlobalIds()
 	return symtab
 }
 
